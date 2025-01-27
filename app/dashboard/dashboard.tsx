@@ -162,10 +162,11 @@ export function Dashboard() {
 
     for (const [deviceId, deviceData] of Object.entries(latestData)) {
       if (deviceId === "eui-ac1f09fffe171756") {
-        if (deviceData.temperature > maxTemperature  && !alertSent) {
+        if (deviceData.temperature > maxTemperature && !alertSent) {
           newOverTemperature = true;
           setAlertSent(true);
           sendData(1, 0, 1);
+          sendData(1, 1, 60);
           break;
         }
       }
@@ -372,6 +373,7 @@ export function Dashboard() {
                   if (!checked) {
                     setAlertSent(false);
                     sendData(1, 0, 0);
+                    sendData(1, 1, 120);
                   }
                 }}
                 checked={overTemperature || alertSent}
