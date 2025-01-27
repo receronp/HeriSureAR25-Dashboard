@@ -18,8 +18,17 @@ import { ChartSeries } from "~/components/chart-series";
 import { LogView } from "~/components/log-view";
 import { ModeToggle } from "~/components/mode-toggle";
 import { ChartContainer, type ChartConfig } from "~/components/ui/chart";
-import { Label, PolarRadiusAxis, RadialBar, RadialBarChart } from "recharts";
+import {
+  Label as RechartsLabel,
+  PolarRadiusAxis,
+  RadialBar,
+  RadialBarChart,
+} from "recharts";
 import { Progress } from "~/components/ui/progress";
+import { Slider } from "~/components/ui/slider";
+import { Input } from "~/components/ui/input";
+import { Switch } from "~/components/ui/switch";
+import { Label } from "~/components/ui/label";
 
 const TIME_RANGES = {
   "30d": { label: "Last 1 month", value: 30 * 24 },
@@ -32,13 +41,13 @@ const TIME_RANGES = {
 } as const;
 
 const chartConfig: ChartConfig = {
-  "eui-ac1f09fffe171756": {
-    label: "RAK3712",
-    color: "hsl(var(--chart-1))",
-  },
   "eui-a84041e8f18646dc": {
     label: "Dragino",
     color: "hsl(var(--chart-2))",
+  },
+  "eui-ac1f09fffe171756": {
+    label: "RAK3712",
+    color: "hsl(var(--chart-1))",
   },
   "eui-24e124785d441512": {
     label: "Milesight",
@@ -49,10 +58,28 @@ const chartConfig: ChartConfig = {
 const DEVICE_IDS = Object.keys(chartConfig);
 
 export function Dashboard() {
+  const [alertSent, setAlertSent] = useState(false);
+  const [overTemperature, setOverTemperature] = useState(false);
+  const [maxTemperature, setMaxTemperature] = useState(30);
   const [timeRange, setTimeRange] = useState("1d" as keyof typeof TIME_RANGES);
   const [dashboardData, setDashboardData] = useState<any[]>([]);
   const [timeUntilRefresh, setTimeUntilRefresh] = useState(60);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    const hasLocalStorage =
+      typeof window !== "undefined" && !!window.localStorage;
+
+    const initializeState = () => {
+      if (hasLocalStorage) {
+        const storedMaxTemperature = localStorage.getItem("maxTemperature");
+        return storedMaxTemperature ? parseInt(storedMaxTemperature, 10) : 30;
+      }
+      return 30;
+    };
+
+    setMaxTemperature(initializeState());
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -111,6 +138,43 @@ export function Dashboard() {
     {}
   );
 
+  const sendData = async (fPort: number, command: number, value: number) => {
+    try {
+      const response = await fetch("/api/mqtt", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ fPort: fPort, command: command, value: value }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+    } catch (error: any) {
+    } finally {
+    }
+  };
+
+  useEffect(() => {
+    let newOverTemperature = false;
+
+    for (const [deviceId, deviceData] of Object.entries(latestData)) {
+      if (deviceId === "eui-ac1f09fffe171756") {
+        if (deviceData.temperature > maxTemperature  && !alertSent) {
+          newOverTemperature = true;
+          setAlertSent(true);
+          sendData(1, 0, 1);
+          break;
+        }
+      }
+    }
+
+    if (newOverTemperature !== overTemperature) {
+      setOverTemperature(newOverTemperature);
+    }
+  }, [latestData, maxTemperature, alertSent]);
+
   const createChartData = (dataKey: "temperature" | "humidity") => {
     return dashboardData.map((item: any) => {
       const deviceId = item.message.device_id;
@@ -150,7 +214,7 @@ export function Dashboard() {
       >
         <RadialBar background dataKey="value" fill={color} />
         <PolarRadiusAxis tick={false} tickLine={false} axisLine={false}>
-          <Label
+          <RechartsLabel
             content={({ viewBox }) => {
               if (viewBox && "cx" in viewBox && "cy" in viewBox) {
                 return (
@@ -218,6 +282,30 @@ export function Dashboard() {
       </Card>
     ));
 
+  // Update max temperature when slider is moved
+  const handleSliderChange = (value: number[]) => {
+    const newTemperature = value[0];
+    setMaxTemperature(newTemperature);
+    if (typeof window !== "undefined") {
+      // Only update localStorage if window is defined
+      localStorage.setItem("maxTemperature", newTemperature.toString());
+    }
+  };
+
+  // Update max temperature when input field is changed
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(event.target.value, 10);
+
+    if (!isNaN(value)) {
+      const newTemperature = Math.min(Math.max(value, 0), 35);
+      setMaxTemperature(newTemperature);
+      if (typeof window !== "undefined") {
+        // Only update localStorage if window is defined
+        localStorage.setItem("maxTemperature", newTemperature.toString());
+      }
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen">
       <div className="flex-1 space-y-4 p-8 pt-6">
@@ -250,13 +338,48 @@ export function Dashboard() {
           </div>
         </div>
         <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="logs">Logs</TabsTrigger>
-            <TabsTrigger value="alerts" disabled>
-              Alerts
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex justify-between items-center">
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="logs">Logs</TabsTrigger>
+            </TabsList>
+            <div className="flex items-center space-x-4 ml-4">
+              <h2 className="text-xl font-semibold">Set Max Temperature</h2>
+              <Slider
+                value={[maxTemperature]}
+                onValueChange={handleSliderChange}
+                min={0}
+                max={35}
+                step={1}
+                className="w-32 lg:w-64"
+              />
+              <div className="flex items-center space-x-2">
+                <Input
+                  type="number"
+                  value={maxTemperature}
+                  onChange={handleInputChange}
+                  className="w-20"
+                />
+                <span className="text-lg">°C</span>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="temperature-alert"
+                onCheckedChange={(checked) => {
+                  setMaxTemperature(30);
+                  if (!checked) {
+                    setAlertSent(false);
+                    sendData(1, 0, 0);
+                  }
+                }}
+                checked={overTemperature || alertSent}
+              />
+              <Label htmlFor="temperature-alert">
+                Over-Temperature Indicator
+              </Label>
+            </div>
+          </div>
           <TabsContent value="overview" className="space-y-4">
             <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-3">
               {renderDeviceCards()}
