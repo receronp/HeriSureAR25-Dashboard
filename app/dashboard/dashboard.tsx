@@ -55,6 +55,7 @@ const chartConfig: ChartConfig = {
   },
 };
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 const DEVICE_IDS = Object.keys(chartConfig);
 
 export function Dashboard() {
@@ -88,7 +89,7 @@ export function Dashboard() {
 
       try {
         const response = await fetch(
-          `/api/logs?timeStart=${startDate.toISOString()}`
+          `${API_URL}/api/v1/logs?timeStart=${startDate.toISOString()}`
         );
 
         if (!response.ok) {
@@ -140,7 +141,7 @@ export function Dashboard() {
 
   const sendData = async (fPort: number, command: number, value: number) => {
     try {
-      const response = await fetch("/api/mqtt", {
+      const response = await fetch(`${API_URL}/api/v1/mqtt`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
