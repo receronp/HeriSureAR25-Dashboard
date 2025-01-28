@@ -83,6 +83,13 @@ export function Dashboard() {
   }, []);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      // Only update localStorage if window is defined
+      localStorage.setItem("maxTemperature", maxTemperature.toString());
+    }
+  }, [maxTemperature]);
+
+  useEffect(() => {
     const fetchData = async () => {
       const hoursToSubtract = TIME_RANGES[timeRange].value;
       const startDate = new Date(Date.now() - hoursToSubtract * 60 * 60 * 1000);
@@ -288,10 +295,6 @@ export function Dashboard() {
   const handleSliderChange = (value: number[]) => {
     const newTemperature = value[0];
     setMaxTemperature(newTemperature);
-    if (typeof window !== "undefined") {
-      // Only update localStorage if window is defined
-      localStorage.setItem("maxTemperature", newTemperature.toString());
-    }
   };
 
   // Update max temperature when input field is changed
@@ -301,10 +304,6 @@ export function Dashboard() {
     if (!isNaN(value)) {
       const newTemperature = Math.min(Math.max(value, 0), 35);
       setMaxTemperature(newTemperature);
-      if (typeof window !== "undefined") {
-        // Only update localStorage if window is defined
-        localStorage.setItem("maxTemperature", newTemperature.toString());
-      }
     }
   };
 
